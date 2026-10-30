@@ -80,6 +80,9 @@ mkdir -p "${WORK}/tmp"
 ( cd "${STAGE}" && TMPDIR="${WORK}/tmp" TMP="${WORK}/tmp" TEMP="${WORK}/tmp" "${FNPCK}" build )
 
 ARCH="$(uname -m)"
+# dist/ 在 .gitignore 里，新 checkout（CI）上根本没有这个目录，
+# 不先建的话 fnpack 都打包成功了，最后一步 mv 会直接摔掉。
+mkdir -p "${ROOT}/dist"
 OUT="${ROOT}/dist/${APPNAME}-${VERSION}-${ARCH}.fpk"
 mv "${STAGE}"/*.fpk "${OUT}"
 echo "wrote ${OUT}"
