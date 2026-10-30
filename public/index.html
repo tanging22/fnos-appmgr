@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>程序管理器</title>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --line: #e3e8f0;
+    --line-2: #eef1f6;
+    --text: #1f2733;
+    --dim: #7a8699;
+    --blue: #2f7cf6;
+    --blue-soft: #e8f1ff;
+    --green: #16a34a;
+    --green-soft: #e7f7ed;
+    --red: #dc2626;
+    --red-soft: #fdeaea;
+    --amber: #d97706;
+    --amber-soft: #fdf3e2;
+    --grey-soft: #eef1f5;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  button {
+    font: inherit; color: var(--text); background: #fff;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px;
+    cursor: pointer; transition: .15s; white-space: nowrap;
+  }
+  button:hover { border-color: #c9d6ea; background: #fafcff; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.primary:hover { background: #256fdd; border-color: #256fdd; }
+  button.danger { color: var(--red); }
+  button.danger:hover { background: var(--red-soft); border-color: #f3c4c4; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.sm { padding: 3px 10px; font-size: 13px; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 26px 22px 70px; }
+  .head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .head h1 { font-size: 21px; margin: 0 0 4px; font-weight: 600; letter-spacing: .2px; }
+  .head .sub { color: var(--dim); font-size: 13px; }
+  .head .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .stat { color: var(--dim); font-size: 12px; text-align: right; line-height: 1.7; }
+  .stat b { color: var(--text); font-weight: 600; }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .toolbar .gap { flex: 1; }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; box-shadow: 0 1px 2px rgba(16, 30, 54, .04);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-weight: 500; font-size: 12.5px; color: var(--dim);
+    background: #fafbfd; padding: 11px 14px; border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.sel { background: var(--blue-soft); }
+  tbody tr.disabled td { color: #a3adbd; }
+  tbody tr.disabled .nm { color: #98a2b3; }
+  .nm { font-weight: 600; }
+  .sub2 { color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .nowrap { white-space: nowrap; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap;
+  }
+  .badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.running { background: var(--green-soft); color: var(--green); }
+  .badge.stopped { background: var(--grey-soft); color: #6b7789; }
+  .badge.crashed { background: var(--red-soft); color: var(--red); }
+  .badge.disabled { background: #f2f4f7; color: #9aa4b2; }
+  .badge.stopping { background: var(--amber-soft); color: var(--amber); }
+
+  .sw { display: inline-flex; align-items: center; cursor: pointer; }
+  .sw input { appearance: none; width: 34px; height: 19px; border-radius: 999px; background: #d7dde6;
+    position: relative; cursor: pointer; transition: .18s; margin: 0; }
+  .sw input::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+    border-radius: 50%; background: #fff; transition: .18s; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  }
+  .sw input:checked { background: var(--blue); }
+  .sw input:checked::after { left: 17px; }
+  .ops { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+  .empty { padding: 60px 20px; text-align: center; color: var(--dim); }
+  .empty .big { font-size: 34px; margin-bottom: 10px; opacity: .5; }
+
+  dialog {
+    border: 0; border-radius: 14px; padding: 0; background: var(--card); color: var(--text);
+    width: min(680px, 94vw); box-shadow: 0 20px 60px rgba(16, 30, 54, .22);
+  }
+  /* 手机 WebView 里 dialog 内部的 overflow 常常滚不动：高度约束挂 dialog 本身、
+     内部用 flex 分配空间，内容区才能真正滚起来（vh 兜底，dvh 优先，老浏览器忽略后者）。 */
+  dialog[open] {
+    display: flex; flex-direction: column; margin: auto;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+  #form-edit { display: flex; flex-direction: column; min-height: 0; margin: 0; }
+  dialog::backdrop { background: rgba(20, 30, 48, .38); }
+  .dlg-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 16px 20px; border-bottom: 1px solid var(--line-2);
+    flex-shrink: 0;
+  }
+  .dlg-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .x {
+    border: 0; background: transparent; font-size: 20px; line-height: 1; color: var(--dim);
+    padding: 2px 6px; border-radius: 6px; cursor: pointer;
+  }
+  .x:hover { background: var(--grey-soft); color: var(--text); }
+  .dlg-body {
+    padding: 18px 20px; display: grid; gap: 14px;
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  }
+  .dlg-foot {
+    padding: 14px 20px; border-top: 1px solid var(--line-2);
+    display: flex; gap: 10px; justify-content: flex-end; background: #fcfdfe;
+    border-radius: 0 0 14px 14px;
+    flex-shrink: 0;
+  }
+  .grid2 { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  .field { display: grid; gap: 6px; }
+  .field > span { font-size: 13px; color: #56607033; color: #566070; }
+  .field .tip { font-size: 12px; color: var(--dim); }
+  input[type=text], input[type=number], select, textarea {
+    font: inherit; color: var(--text); background: #fff;
+    border: 1px solid #d9e0ea; border-radius: 8px; padding: 8px 11px; width: 100%;
+    transition: .15s;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,124,246,.12); }
+  textarea { resize: vertical; }
+  textarea.code {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6;
+    min-height: 230px; background: #fbfcfe; tab-size: 2;
+  }
+  .adv { border: 1px solid var(--line-2); border-radius: 10px; padding: 0 14px; background: #fbfcfe; }
+  .adv summary {
+    cursor: pointer; padding: 11px 0; font-size: 13px; color: #566070; list-style: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .adv summary::-webkit-details-marker { display: none; }
+  .adv summary::before { content: "▸"; color: var(--dim); transition: .15s; }
+  .adv[open] summary::before { transform: rotate(90deg); }
+  .adv .inner { padding: 4px 0 16px; display: grid; gap: 13px; }
+  .switches { display: flex; gap: 20px; flex-wrap: wrap; }
+  .switches label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3c4655; cursor: pointer; }
+  .switches input { accent-color: var(--blue); }
+
+  pre.log {
+    margin: 0; padding: 16px 20px; flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; background: #fbfcfe;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all; color: #2c3543;
+  }
+  .err { color: var(--red); font-size: 12.5px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+    background: #1f2733; color: #fff; padding: 9px 18px; border-radius: 999px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 99;
+  }
+  .toast.on { opacity: .95; bottom: 40px; }
+
+  /* ===== 手机（≤620px）：九列表格摊成一张张卡片 =====
+     不动 JS：tr/td 结构原样保留（事件委托还靠 closest('tr')），
+     只用 CSS 把行摊成块、每格左侧出标签。 */
+  @media (max-width: 620px) {
+    .wrap { padding: 14px 12px 28px; }
+    .head { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .head h1 { font-size: 18px; }
+    .stat { flex-wrap: wrap; gap: 4px 12px; font-size: 11px; }
+    .toolbar { flex-wrap: wrap; }
+    .panel { border-radius: 10px; }
+    thead { display: none; }
+    table, tbody { display: block; width: 100%; }
+    tbody tr { display: block; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+    tbody tr:last-child { border-bottom: 0; }
+    tbody td {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 5px 0; min-height: 32px; text-align: right;
+    }
+    tbody td::before {
+      content: attr(data-label); color: var(--dim); font-size: 12px; flex: none;
+    }
+    /* 名字行：不放标签，名字放大当卡片标题 */
+    tbody td.c-name { flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+    tbody td.c-name::before { display: none; }
+    tbody td.c-name .nm { font-size: 15px; font-weight: 600; }
+    /* 操作行：按钮换行铺满，不放标签 */
+    tbody td.c-ops { display: block; }
+    tbody td.c-ops::before { display: none; }
+    .ops { justify-content: flex-start; }
+    dialog { width: calc(100vw - 16px); max-width: calc(100vw - 16px); }
+    .dlg-body { padding: 14px 12px; }
+    .dlg-foot { padding: 12px; }
+    textarea.code { min-height: 170px; }
+    pre.log { padding: 12px; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>程序管理器</h1>
+      <div class="sub">贴一段代码进去就行 —— 自己认 Node / Python / Go / Shell，自动落盘，挂了自己拉起来。 <span style="color:#9aa5b5;font-size:12px">v1.0.6</span></div>
+    </div>
+    <div class="right">
+      <div class="stat" id="sys">·</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="primary" id="btn-new">+ 新建程序</button>
+    <button id="btn-refresh">刷新</button>
+    <div class="gap"></div>
+    <span class="sub" id="updated"></span>
+  </div>
+
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:96px">状态</th>
+          <th>程序</th>
+          <th style="width:74px">类型</th>
+          <th style="width:110px">运行时长</th>
+          <th style="width:86px">PID</th>
+          <th style="width:74px">重启</th>
+          <th style="width:60px">开机</th>
+          <th style="width:60px">守护</th>
+          <th style="width:260px"></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>
+      <div class="big">空</div>
+      还没有程序。点左上角「新建程序」，把代码贴进去就行。
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg-edit">
+  <form method="dialog" id="form-edit">
+    <div class="dlg-head">
+      <h2 id="edit-title">新建程序</h2>
+      <button type="button" class="x" id="edit-close" title="关闭">×</button>
+    </div>
+    <div class="dlg-body">
+      <div class="grid2">
+        <label class="field">
+          <span>名字</span>
+          <input type="text" name="name" required maxlength="60" placeholder="比如：飞牛转 Bark">
+        </label>
+        <label class="field">
+          <span>运行用户</span>
+          <select name="runAs" id="edit-runAs">
+            <option value="">（跟管理器一样）</option>
+          </select>
+          <div class="tip">选谁就用谁的身份跑；root = 最高权限。</div>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>代码</span>
+        <textarea name="code" id="edit-code" class="code" spellcheck="false"
+          placeholder="print('hello world')&#10;&#10;或者把 node / python / bash / go 的代码整段贴进来"></textarea>
+        <div class="tip"><span id="detect-hint">贴完代码会自动判断</span> —— 认 script 头、package main、def、require、console.log 这些特征；认不出的按 Node 处理。</div>
+      </label>
+
+      <div class="switches">
+        <label><input type="checkbox" name="enabled" checked> 启用</label>
+        <label><input type="checkbox" name="autostart"> 开机运行</label>
+        <label><input type="checkbox" name="guard" checked> 进程守护</label>
+      </div>
+
+      <details class="adv">
+        <summary>高级设置（一般不用碰）</summary>
+        <div class="inner">
+          <div class="grid2">
+            <label class="field">
+              <span>强制类型</span>
+              <select name="type">
+                <option value="">自动识别</option>
+                <option value="node">Node</option>
+                <option value="python">Python</option>
+                <option value="go">Go</option>
+                <option value="bash">Shell</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>最大重启次数</span>
+              <input type="number" name="maxRestarts" min="0" max="999" value="5">
+            </label>
+          </div>
+          <label class="field">
+            <span>启动命令（留空 = 用上面的代码）</span>
+            <input type="text" name="path" placeholder="/vol1/1000/server/xxx   已编译好的二进制填这里">
+          </label>
+          <label class="field">
+            <span>参数</span>
+            <input type="text" name="args" placeholder="--port 8080">
+          </label>
+          <div class="grid2">
+            <label class="field">
+              <span>工作目录</span>
+              <input type="text" name="cwd" placeholder="留空 = 程序自己的目录">
+            </label>
+            <label class="field">
+              <span>解释器覆盖</span>
+              <input type="text" name="interpreter" placeholder="/usr/bin/python3">
+            </label>
+          </div>
+          <label class="field">
+            <span>环境变量（一行一个 KEY=VALUE）</span>
+            <textarea name="env" rows="3" spellcheck="false" placeholder="GOCACHE=/tmp/gocache"></textarea>
+          </label>
+        </div>
+      </details>
+
+      <div class="err" id="edit-err"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" value="cancel" formnovalidate id="edit-cancel">取消</button>
+      <button type="submit" class="primary" id="btn-save" value="save">保存并运行</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-log">
+  <div class="dlg-head">
+    <h2 id="log-title">日志</h2>
+    <div style="display:flex;gap:6px">
+      <button type="button" class="sm" id="btn-log-refresh">刷新</button>
+      <button type="button" class="x" id="btn-log-close" title="关闭">×</button>
+    </div>
+  </div>
+  <pre class="log" id="log-body"></pre>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '')
+const rowsEl = document.getElementById('rows')
+const emptyEl = document.getElementById('empty')
+const sysEl = document.getElementById('sys')
+const updatedEl = document.getElementById('updated')
+const editDlg = document.getElementById('dlg-edit')
+const form = document.getElementById('form-edit')
+const logDlg = document.getElementById('dlg-log')
+const logBody = document.getElementById('log-body')
+const logTitle = document.getElementById('log-title')
+const editErr = document.getElementById('edit-err')
+const detectHint = document.getElementById('detect-hint')
+
+let apps = []
+let editingId = null
+let logAppId = null
+let timer = null
+
+async function api(path, options = {}) {
+  const res = await fetch(BASE + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  let data = null
+  try { data = await res.json() } catch { data = null }
+  if (!res.ok || (data && data.ok === false)) {
+    throw new Error((data && data.error) || ('HTTP ' + res.status))
+  }
+  return data
+}
+
+function toast(text) {
+  const el = document.getElementById('toast')
+  el.textContent = text
+  el.classList.add('on')
+  clearTimeout(toast._t)
+  toast._t = setTimeout(() => el.classList.remove('on'), 1800)
+}
+
+function fmtDuration(ms) {
+  if (!ms || ms < 0) return '—'
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return s + ' 秒'
+  const m = Math.floor(s / 60)
+  if (m < 60) return m + ' 分 ' + (s % 60) + ' 秒'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + ' 小时 ' + (m % 60) + ' 分'
+  return Math.floor(h / 24) + ' 天 ' + (h % 24) + ' 小时'
+}
+
+const STATUS = {
+  running: ['运行中', 'running'],
+  stopping: ['停止中', 'stopping'],
+  stopped: ['已停止', 'stopped'],
+  crashed: ['已崩溃', 'crashed'],
+  disabled: ['已停用', 'disabled'],
+}
+
+function badge(status) {
+  const [text, cls] = STATUS[status] || ['未知', 'stopped']
+  return '<span class="badge ' + cls + '"><i></i>' + text + '</span>'
+}
+
+let usersLoadedAt = 0
+async function loadUsers(force = false) {
+  const sel = document.getElementById('edit-runAs')
+  if (!sel) return
+  // 60 秒内不重复拉。以前失败也把「已加载」钉死，下拉就永远只剩默认项 ——
+  // 现在只有成功才记时间，失败的话下一轮 3 秒轮询会自动补上。
+  if (!force && Date.now() - usersLoadedAt < 60000) return
+  const keep = sel.value
+  try {
+    const data = await api('/api/users')
+    const opts = (data.users || [])
+      .map((u) => `<option value="${u.name}">${u.name}（uid ${u.uid}）</option>`)
+      .join('')
+    sel.innerHTML = `<option value="">（跟管理器一样）</option>${opts}`
+    sel.value = keep
+    usersLoadedAt = Date.now()
+  } catch { /* 拿不到就只留默认项，下轮再试 */ }
+}
+
+function render() {
+  emptyEl.hidden = apps.length > 0
+  rowsEl.innerHTML = apps.map((app) => {
+    const running = app.status === 'running' || app.status === 'stopping'
+    const disabled = app.enabled === false
+    const sub = app.sourcePath ? app.sourcePath.split('/').slice(-2).join('/') : (app.path || '')
+    return '<tr class="' + (disabled ? 'disabled' : '') + '" data-id="' + app.id + '">' +
+      '<td data-label="状态">' + badge(app.status) + '</td>' +
+      '<td class="c-name" data-label="程序"><div class="nm">' + esc(app.name) + '</div><div class="sub2 mono">' + esc(sub) + '</div></td>' +
+      '<td data-label="类型"><span class="mono">' + esc(app.type || '—') + '</span></td>' +
+      '<td data-label="运行时长" class="nowrap">' + (running ? fmtDuration(app.uptimeMs) : '—') + '</td>' +
+      '<td data-label="PID" class="mono">' + (app.pid || '—') + '</td>' +
+      '<td data-label="重启">' + (app.restarts || 0) + '</td>' +
+      '<td data-label="开机"><label class="sw"><input type="checkbox" data-k="autostart"' + (app.autostart ? ' checked' : '') + '></label></td>' +
+      '<td data-label="守护"><label class="sw"><input type="checkbox" data-k="guard"' + (app.guard !== false ? ' checked' : '') + '></label></td>' +
+      '<td class="c-ops" data-label="操作"><div class="ops">' +
+        (running
+          ? '<button class="sm" data-act="stop">停止</button>'
+          : '<button class="sm primary" data-act="start"' + (disabled ? ' disabled' : '') + '>启动</button>') +
+        '<button class="sm" data-act="restart">重启</button>' +
+        '<button class="sm" data-act="logs">日志</button>' +
+        '<button class="sm" data-act="edit">编辑</button>' +
+        '<button class="sm danger" data-act="del">删除</button>' +
+      '</div></td>' +
+    '</tr>'
+  }).join('')
+}
+
+function esc(text) {
+  return String(text == null ? '' : text).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
+}
+
+async function load() {
+  try {
+    const [list, sys] = await Promise.all([api('/api/apps'), api('/api/system')])
+    apps = list.apps || []
+    render()
+    loadUsers()
+    const s = sys.system || {}
+    sysEl.innerHTML = 'Node <b>' + esc(s.node || '?') + '</b> · 共 <b>' + (s.total || 0) +
+      '</b> 个 · 运行 <b>' + (s.running || 0) + '</b> · 崩溃 <b>' + (s.crashed || 0) + '</b>'
+    updatedEl.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN')
+  } catch (error) {
+    sysEl.innerHTML = '<span class="err">' + esc(error.message) + '</span>'
+  }
+}
+
+rowsEl.addEventListener('change', async (event) => {
+  const box = event.target
+  const key = box.dataset.k
+  if (!key) return
+  const tr = box.closest('tr')
+  const app = apps.find((item) => item.id === tr.dataset.id)
+  if (!app) return
+  app[key] = box.checked
+  try {
+    await api('/api/apps/' + app.id, {
+      method: 'PUT',
+      body: JSON.stringify({ [key]: box.checked }),
+    })
+    toast(key === 'guard' ? (box.checked ? '守护已开' : '守护已关') : (box.checked ? '开机自启已开' : '开机自启已关'))
+    load()
+  } catch (error) {
+    box.checked = !box.checked
+    toast('保存失败：' + error.message)
+  }
+})
+
+rowsEl.addEventListener('click', async (event) => {
+  const btn = event.target.closest('button[data-act]')
+  if (!btn) return
+  const tr = btn.closest('tr')
+  const id = tr.dataset.id
+  const app = apps.find((item) => item.id === id)
+  if (!app) return
+  const act = btn.dataset.act
+  btn.disabled = true
+  try {
+    if (act === 'logs') {
+      openLog(app)
+    } else if (act === 'edit') {
+      openEdit(app)
+    } else if (act === 'del') {
+      if (!confirm('删掉「' + app.name + '」？代码文件也会一起删。')) return
+      await api('/api/apps/' + id, { method: 'DELETE' })
+      toast('已删除')
+      load()
+    } else {
+      await api('/api/apps/' + id + '/' + act, { method: 'POST' })
+      toast(act === 'start' ? '已启动' : act === 'stop' ? '已停止' : '已重启')
+      setTimeout(load, 260)
+    }
+  } catch (error) {
+    toast('操作失败：' + error.message)
+  } finally {
+    btn.disabled = false
+  }
+})
+
+const CODE_HINTS = [
+  [/^#!.*\bpython/im, 'Python（看 shebang）'],
+  [/^#!.*\bnode/im, 'Node（看 shebang）'],
+  [/^#!.*\b(?:ba)?sh/im, 'Shell（看 shebang）'],
+  [/^\s*package\s+[A-Za-z_]\w*\s*$/m, 'Go（看 package 声明）'],
+  [/^\s*(?:def|class|import|from)\s+\w+/m, 'Python'],
+  [/\b(?:require\s*\(|module\.exports|console\.\w+\s*\()/m, 'Node'],
+]
+
+function guessType(code) {
+  if (!code || !code.trim()) return ''
+  for (const [re, hint] of CODE_HINTS) {
+    if (re.test(code)) return hint
+  }
+  return '认不出特征，按 Node 处理'
+}
+
+document.getElementById('edit-code').addEventListener('input', (event) => {
+  detectHint.textContent = guessType(event.target.value) || '贴完代码会自动判断'
+})
+
+function openEdit(app) {
+  editingId = app ? app.id : null
+  form.reset()
+  editErr.textContent = ''
+  document.getElementById('edit-title').textContent = app ? '编辑程序' : '新建程序'
+  form.name.value = ''
+  form.code.value = ''
+  form.type.value = ''
+  form.maxRestarts.value = 5
+  form.enabled.checked = true
+  form.autostart.checked = false
+  form.guard.checked = true
+  detectHint.textContent = '贴完代码会自动判断'
+
+  if (app) {
+    form.name.value = app.name || ''
+    form.type.value = app.forcedType || ''
+    form.maxRestarts.value = app.maxRestarts == null ? 5 : app.maxRestarts
+    form.enabled.checked = app.enabled !== false
+    form.autostart.checked = Boolean(app.autostart)
+    form.guard.checked = app.guard !== false
+    form.path.value = app.path || ''
+    form.args.value = app.args || ''
+    form.cwd.value = app.cwd || ''
+    form.interpreter.value = app.interpreter || ''
+    form.env.value = app.env || ''
+    form.runAs.value = app.runAs || ''
+    if (app.sourcePath || app.path) {
+      api('/api/apps/' + app.id + '/source')
+        .then((data) => {
+          form.code.value = data.code || ''
+          detectHint.textContent = guessType(data.code) || '贴完代码会自动判断'
+        })
+        .catch(() => {})
+    }
+  } else {
+    form.path.value = ''
+    form.args.value = ''
+    form.cwd.value = ''
+    form.interpreter.value = ''
+    form.env.value = ''
+    form.runAs.value = ''
+  }
+
+  editDlg.showModal()
+  setTimeout(() => form.name.focus(), 40)
+}
+
+document.getElementById('btn-new').addEventListener('click', () => openEdit(null))
+document.getElementById('btn-refresh').addEventListener('click', () => load())
+// 手指在弹层里滑动收尾时，浏览器也会补发一个 click；位置若落在弹层边界外，
+// 会被误判成「点遮罩关闭」。所以记一下 touchmove：滑过就不算点击。
+let touchMoved = false
+window.addEventListener('touchstart', () => { touchMoved = false }, { passive: true })
+window.addEventListener('touchmove', () => { touchMoved = true }, { passive: true })
+
+document.getElementById('edit-close').addEventListener('click', () => editDlg.close())
+document.getElementById('edit-cancel').addEventListener('click', () => editDlg.close())
+
+editDlg.addEventListener('click', (event) => {
+  if (touchMoved) return
+  const box = editDlg.getBoundingClientRect()
+  const outside =
+    event.clientX < box.left || event.clientX > box.right ||
+    event.clientY < box.top || event.clientY > box.bottom
+  if (outside) editDlg.close()
+})
+
+form.addEventListener('submit', async (event) => {
+  if (event.submitter && event.submitter.value === 'cancel') {
+    editDlg.close()
+    return
+  }
+  event.preventDefault()
+  editErr.textContent = ''
+  const payload = {
+    name: form.name.value.trim(),
+    enabled: form.enabled.checked,
+    autostart: form.autostart.checked,
+    guard: form.guard.checked,
+    maxRestarts: Number(form.maxRestarts.value || 5),
+  }
+  const code = form.code.value
+  if (code.trim()) payload.code = code
+  if (form.type.value) payload.forcedType = form.type.value
+  if (form.path.value.trim()) payload.path = form.path.value.trim()
+  if (form.args.value.trim()) payload.args = form.args.value.trim()
+  if (form.cwd.value.trim()) payload.cwd = form.cwd.value.trim()
+  if (form.interpreter.value.trim()) payload.interpreter = form.interpreter.value.trim()
+  if (form.env.value.trim()) payload.env = form.env.value.trim()
+  if (form.runAs.value.trim()) payload.runAs = form.runAs.value.trim()
+
+  if (!payload.name) {
+    editErr.textContent = '名字不能空着'
+    return
+  }
+  if (!code.trim() && !payload.path) {
+    editErr.textContent = '要么贴代码，要么在高级设置里填一个启动命令'
+    return
+  }
+
+  const saveBtn = document.getElementById('btn-save')
+  saveBtn.disabled = true
+  try {
+    if (editingId) {
+      await api('/api/apps/' + editingId, { method: 'PUT', body: JSON.stringify(payload) })
+    } else {
+      const created = await api('/api/apps', { method: 'POST', body: JSON.stringify(payload) })
+      editingId = created.app && created.app.id
+    }
+    editDlg.close()
+    toast('已保存')
+    await load()
+    if (editingId && payload.enabled) {
+      try { await api('/api/apps/' + editingId + '/start', { method: 'POST' }) } catch { /* 起不来让他看日志 */ }
+      setTimeout(load, 400)
+    }
+  } catch (error) {
+    editErr.textContent = error.message
+  } finally {
+    saveBtn.disabled = false
+  }
+})
+
+function openLog(app) {
+  logAppId = app.id
+  logTitle.textContent = '日志 · ' + app.name
+  logBody.textContent = '读取中…'
+  logDlg.showModal()
+  refreshLog()
+}
+
+async function refreshLog() {
+  if (!logAppId) return
+  try {
+    const data = await api('/api/apps/' + logAppId + '/logs?lines=400')
+    logBody.textContent = data.text || '（还没有输出）'
+    logBody.scrollTop = logBody.scrollHeight
+  } catch (error) {
+    logBody.textContent = '读不到日志：' + error.message
+  }
+}
+
+document.getElementById('btn-log-refresh').addEventListener('click', refreshLog)
+document.getElementById('btn-log-close').addEventListener('click', () => logDlg.close())
+logDlg.addEventListener('click', (event) => {
+  if (touchMoved) return
+  const box = logDlg.getBoundingClientRect()
+  const outside =
+    event.clientX < box.left || event.clientX > box.right ||
+    event.clientY < box.top || event.clientY > box.bottom
+  if (outside) logDlg.close()
+})
+
+function tick() {
+  if (document.hidden || editDlg.open || logDlg.open) return
+  load()
+}
+
+load()
+timer = setInterval(tick, 3000)
+window.addEventListener('beforeunload', () => clearInterval(timer))
+</script>
+</body>
+</html>

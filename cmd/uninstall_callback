@@ -1,0 +1,18 @@
+#!/bin/bash
+# uninstall_callback — 卸载完成后的收尾
+#
+# 数据默认保留：用户可能是卸载重装，清单和日志都在 ${DATA_DIR} 里。
+# 只有向导里明确勾了「删除数据」才真的清。
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || true
+echo "[$(date '+%F %T')] uninstall_callback: ${APP_NAME} removed from ${APP_DIR}" \
+    >> "${DATA_DIR}/uninstall.log" 2>/dev/null || true
+
+# 只清自己留下的 socket，别去动数据目录。
+rm -f "${TRIM_APPDEST_SOCK:-/var/apps/${APP_NAME}/target/app.sock}" 2>/dev/null || true
+exit 0

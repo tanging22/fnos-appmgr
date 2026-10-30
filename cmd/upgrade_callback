@@ -1,0 +1,22 @@
+#!/bin/bash
+# upgrade_callback — 升级完成后
+#
+# 新版文件已就位。拉起服务；起不来也不让升级流程报错，管理器的日志里能查。
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+LOG="${DATA_DIR}/upgrade.log"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || true
+echo "[$(date '+%F %T')] upgrade_callback start (new files at ${APP_DIR})" >> "${LOG}" 2>/dev/null || true
+
+if [ -x "${APP_DIR}/cmd/main" ]; then
+    "${APP_DIR}/cmd/main" start >> "${LOG}" 2>&1 || true
+else
+    echo "[$(date '+%F %T')] WARN: ${APP_DIR}/cmd/main missing; nothing to start" >> "${LOG}" 2>/dev/null || true
+fi
+
+echo "[$(date '+%F %T')] upgrade_callback done" >> "${LOG}" 2>/dev/null || true
+exit 0

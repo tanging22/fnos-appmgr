@@ -1,0 +1,53 @@
+name: build-fpk
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download fnpack
+        run: |
+          mkdir -p tools
+          curl -fsSL -o tools/fnpack https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64
+          chmod +x tools/fnpack
+          tools/fnpack --version || true
+
+      - name: Make icons
+        run: node scripts/make-icons.mjs
+
+      - name: Build fpk
+        run: bash scripts/build-fpk.sh "$(pwd)/tools/fnpack"
+
+      - name: List dist
+        run: ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnos-appmgr-fpk
+          path: dist/*.fpk
+          if-no-files-found: error
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.fpk

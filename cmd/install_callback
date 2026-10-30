@@ -1,0 +1,20 @@
+#!/bin/bash
+# install_callback — 文件就位后初始化数据目录
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+
+mkdir -p "${DATA_DIR}/logs" "${DATA_DIR}/run" 2>/dev/null || true
+
+# 清单只在它真的不存在或为空时才初始化。
+# 重装 / 覆盖安装的情况绝不能把用户已经配好的程序清单一键清空 —— 这一点
+# 和 .credentials.yaml 被 `>` 整份覆盖是同一类事故，只是这次代价更大。
+if [ ! -s "${DATA_DIR}/apps.json" ]; then
+    printf '{\n  "apps": []\n}\n' > "${DATA_DIR}/apps.json"
+fi
+
+echo "[$(date '+%F %T')] install_callback: data at ${DATA_DIR}" \
+    >> "${DATA_DIR}/install.log" 2>/dev/null || true
+exit 0

@@ -1,0 +1,12 @@
+# 用户数据：贴进去的程序代码会落在这里（可能含 key），绝不进仓库
+data/
+
+# 构建产物
+dist/
+.build-tmp/
+
+# 环境残留
+node_modules/
+__pycache__/
+*.log
+*.pid

@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "fnos-appmgr.Application": {
+            "title": "程序管理器",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "microApp": true,
+            "protocol": "",
+            "gatewaySocket": "app.sock",
+            "gatewayPrefix": "/app/fnos-appmgr",
+            "url": "/app/fnos-appmgr/",
+            "allUsers": true
+        }
+    }
+}

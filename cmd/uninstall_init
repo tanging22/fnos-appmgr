@@ -1,0 +1,24 @@
+#!/bin/bash
+# uninstall_init — 卸载前先把服务停下来
+#
+# 不在这里删数据：卸载流程可能被用户取消，删了就回不来了。
+# 真正要不要清数据由 uninstall_callback 按向导里的选择处理。
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+
+if [ -x "${APP_DIR}/cmd/main" ]; then
+    "${APP_DIR}/cmd/main" stop >> "${DATA_DIR}/uninstall.log" 2>&1 || true
+fi
+
+pidfile="${DATA_DIR}/appmgr.pid"
+if [ -f "${pidfile}" ]; then
+    pid="$(cat "${pidfile}" 2>/dev/null || true)"
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        kill "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${pidfile}" 2>/dev/null || true
+fi
+exit 0

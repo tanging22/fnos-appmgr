@@ -1,0 +1,17 @@
+appname=fnos-appmgr
+version=1.0.8
+display_name=程序管理器
+desc=管你自己的 Node / Python / Go 小程序：新建时选类型，启停、启用停用、开机自启、看日志看状态，进程挂了自动按退避拉起，崩太多次就停下不再硬撑。
+platform=all
+source=thirdparty
+maintainer=tanging22
+maintainer_url=https://github.com/tanging22
+distributor=tanging22
+distributor_url=https://github.com/tanging22
+desktop_uidir=ui
+desktop_applaunchname=fnos-appmgr.Application
+service_port=28080
+ctl_stop=true
+checkport=false
+micro_app=true
+install_dep_apps=nodejs_v22

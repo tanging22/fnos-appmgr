@@ -1,0 +1,32 @@
+#!/bin/bash
+# upgrade_init — 升级前准备
+#
+# 与卸载不同：升级必须保留 ${DATA_DIR} 里的 apps.json、日志和运行记录。
+# 这里只把服务停干净，否则新版文件覆盖上去的时候旧进程还在跑。
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+LOG="${DATA_DIR}/upgrade.log"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || true
+echo "[$(date '+%F %T')] upgrade_init start (from ${APP_DIR})" >> "${LOG}" 2>/dev/null || true
+
+if [ -x "${APP_DIR}/cmd/main" ]; then
+    "${APP_DIR}/cmd/main" stop >> "${LOG}" 2>&1 || true
+fi
+
+pidfile="${DATA_DIR}/appmgr.pid"
+if [ -f "${pidfile}" ]; then
+    pid="$(cat "${pidfile}" 2>/dev/null || true)"
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        kill "${pid}" 2>/dev/null || true
+        sleep 1
+        kill -9 "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${pidfile}" 2>/dev/null || true
+fi
+
+echo "[$(date '+%F %T')] upgrade_init done; data preserved at ${DATA_DIR}" >> "${LOG}" 2>/dev/null || true
+exit 0

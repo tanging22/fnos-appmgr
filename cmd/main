@@ -1,0 +1,132 @@
+#!/bin/bash
+# 程序管理器的启停脚本。fnOS 通过 ctl_stop / 应用中心按钮调 start 和 stop。
+#
+# 管理器本身只是一个 http 服务：listen 在 unix socket 上，由 fnOS 统一网关
+# 按 GATEWAY_PREFIX 转发进来，所以这里不需要对外开任何端口。
+set -u
+
+CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+
+# 数据目录：fnOS 给什么用什么，没给就退到 @appdata 下的同名目录。
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+    DATA_DIR="${TRIM_PKGVAR}"
+else
+    APP_VOL="${TRIM_APPDEST_VOL:-}"
+    if [ -z "${APP_VOL}" ] && [ -d "${APP_DIR}" ]; then
+        APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's|^\(/vol[0-9]*\)/.*|\1|p')"
+    fi
+    DATA_DIR="${APP_VOL:-/vol1}/@appdata/${APP_NAME}"
+fi
+
+SOCK_PATH="/var/apps/${APP_NAME}/target/app.sock"
+GATEWAY_PREFIX="/app/${APP_NAME}"
+APPMGR_PORT="${TRIM_SERVICE_PORT:-28080}"
+PID_FILE="${DATA_DIR}/appmgr.pid"
+OUT_LOG="${DATA_DIR}/appmgr.out"
+
+# node 从 fnOS 的依赖应用里找；找不到再退回 PATH 上的那个。
+pick_node() {
+    local candidate
+    for candidate in \
+        "${TRIM_NODE_BIN:-}" \
+        /vol1/@appcenter/nodejs_v22/bin/node \
+        /vol1/@appcenter/nodejs_v20/bin/node \
+        "$(command -v node 2>/dev/null || true)"; do
+        if [ -n "${candidate}" ] && [ -x "${candidate}" ]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+pid_alive() {
+    local pid="$1"
+    [ -n "${pid}" ] || return 1
+    kill -0 "${pid}" 2>/dev/null
+}
+
+start() {
+    local node_bin pid
+    mkdir -p "${DATA_DIR}" "${DATA_DIR}/logs" "${DATA_DIR}/run" "$(dirname "${SOCK_PATH}")"
+
+    if [ -f "${PID_FILE}" ]; then
+        pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+        if pid_alive "${pid}"; then
+            echo "already running (pid ${pid})"
+            return 0
+        fi
+        rm -f "${PID_FILE}"
+    fi
+
+    node_bin="$(pick_node)" || { echo "ERROR: no node found" >&2; return 1; }
+
+    # 上一轮留下的 socket 文件如果还在，先清掉，否则 listen 会 EADDRINUSE。
+    rm -f "${SOCK_PATH}"
+
+    APPMGR_BASE="${DATA_DIR}" \
+    SOCK_PATH="${SOCK_PATH}" \
+    GATEWAY_PREFIX="${GATEWAY_PREFIX}" \
+    APPMGR_HOST=127.0.0.1 \
+    APPMGR_PORT="${APPMGR_PORT}" \
+    setsid nohup "${node_bin}" "${CMD_DIR}/server.mjs" >> "${OUT_LOG}" 2>&1 &
+
+    echo $! > "${PID_FILE}"
+
+    # 等 socket 真能连上再算启动成功：只看文件存在会被上一轮的残留骗过去。
+    local waited=0
+    while [ "${waited}" -lt 30 ]; do
+        if [ -S "${SOCK_PATH}" ]; then
+            echo "started (pid $(cat "${PID_FILE}")) ${SOCK_PATH} prefix ${GATEWAY_PREFIX}"
+            return 0
+        fi
+        sleep 0.25
+        waited=$((waited + 1))
+    done
+
+    echo "ERROR: socket ${SOCK_PATH} not ready; see ${OUT_LOG}" >&2
+    return 1
+}
+
+stop() {
+    local pid
+    if [ ! -f "${PID_FILE}" ]; then
+        rm -f "${SOCK_PATH}"
+        echo "not running"
+        return 0
+    fi
+    pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+    if pid_alive "${pid}"; then
+        kill "${pid}" 2>/dev/null || true
+        local waited=0
+        while pid_alive "${pid}" && [ "${waited}" -lt 40 ]; do
+            sleep 0.25
+            waited=$((waited + 1))
+        done
+        if pid_alive "${pid}"; then
+            kill -9 "${pid}" 2>/dev/null || true
+        fi
+    fi
+    rm -f "${PID_FILE}" "${SOCK_PATH}"
+    echo "stopped"
+}
+
+status() {
+    local pid
+    if [ -f "${PID_FILE}" ] && pid_alive "$(cat "${PID_FILE}" 2>/dev/null || true)"; then
+        echo "running (pid $(cat "${PID_FILE}"))"
+        return 0
+    fi
+    echo "stopped"
+    return 1
+}
+
+case "${1:-start}" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; start ;;
+    status) status ;;
+    *) echo "usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
+esac

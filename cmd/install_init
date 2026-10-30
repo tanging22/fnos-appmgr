@@ -1,0 +1,5 @@
+#!/bin/bash
+### 安装前调用。
+# 程序管理器不需要在安装前准备任何东西：数据目录与 apps.json 由
+# install_callback 创建。这个脚本存在只是为了满足 fnpack 的生命周期约定。
+exit 0

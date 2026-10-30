@@ -1,0 +1,35 @@
+#!/bin/bash
+# config_init — 套件「设置」页打开前的准备
+#
+# 管理器自己的设置都在页面里（POST /api/apps），fnOS 这一层没有表单，
+# 所以只负责确认它在跑。
+set -u
+
+APP_NAME="${TRIM_APPNAME:-fnos-appmgr}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+SOCK_PATH="${TRIM_APPDEST_SOCK:-/var/apps/${APP_NAME}/target/app.sock}"
+LOG="${DATA_DIR}/config.log"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || true
+echo "[$(date '+%F %T')] config_init" >> "${LOG}" 2>/dev/null || true
+
+# socket 在、且真能连上，才算活着。只看文件存在会把上一实例残留的 socket
+# 当成「已就绪」，于是页面打不开而脚本认为一切正常。
+alive=1
+if [ -S "${SOCK_PATH}" ]; then
+    python3 - "${SOCK_PATH}" <<'PY' 2>/dev/null || alive=0
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(2)
+s.connect(sys.argv[1])
+PY
+else
+    alive=0
+fi
+
+if [ "${alive}" -ne 1 ] && [ -x "${APP_DIR}/cmd/main" ]; then
+    echo "[$(date '+%F %T')] not listening; starting" >> "${LOG}" 2>/dev/null || true
+    "${APP_DIR}/cmd/main" start >> "${LOG}" 2>&1 || true
+fi
+exit 0
